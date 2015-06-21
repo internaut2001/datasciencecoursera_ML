@@ -1,0 +1,124 @@
+---
+title: "Predicting Activity Quality From Activity Monitors"
+author: "PC"
+date: "Saturday, June 20, 2015"
+output: html_document
+---
+```{r, echo=FALSE}
+# Background
+# 
+# 
+# Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+# 
+# 
+# 
+# 
+# Data 
+# 
+# 
+# The training data for this project are available here: 
+#     
+#     https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+# 
+# The test data are available here: 
+#     
+#     https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+# 
+# The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+# 
+# What you should submit
+# 
+# The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+# 
+# 1. Your submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-).
+# 2. You should also apply your machine learning algorithm to the 20 test cases available in the test data above. Please submit your predictions in appropriate format to the programming assignment for automated grading. See the programming assignment for additional details. 
+# 
+# 
+# Reproducibility 
+# 
+# Due to security concerns with the exchange of R code, your code will not be run during the evaluation by your classmates. Please be sure that if they download the repo, they will be able to view the compiled HTML version of your analysis. 
+
+```
+
+## Background
+
+In this project, the goal was to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict whether the dumbell exercise was performed correctly or not. The participants were asked to perform dumbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+
+The data was downloaded and cleaned by removing columns with NAs and "#Div/0!".  In addition the rows, with summary information of the completed exercise were removed, as this information is only available after the completion of the exercise.
+
+```{r}
+rawtrain <- read.csv("D:\\Library\\Coursera\\Data Science Specialization\\Practical Machine Learning\\pml-training.csv")
+rawtest <- read.csv("D:\\Library\\Coursera\\Data Science Specialization\\Practical Machine Learning\\pml-testing.csv")
+
+# clean data
+data <- rawtrain[which(rawtrain$new_window == "no"), c(8:11, 37:49, 60:68, 84:86, 102, 113:124, 140, 151:159, 160)] # NAs etc
+summary(data) # 19216 x 53
+# convert factors to numeric except response (classe )
+convert_fact_to_num <- function(coldata){
+    tmp <- as.numeric(as.character(coldata))
+}
+tmp <- data
+for (i in 1:(NCOL(tmp) - 1)) {
+    tmp[, i] <- convert_fact_to_num(tmp[, i])
+}
+data <- tmp
+summary(data)
+```
+
+## Model
+
+The model was built using the Random Forest (RF) algorithm on 53 predictor variables.  RF was chosen as it shows high accuracy and for the purposes of this project interpretability of the model was not important ie the accuracy of its forecast were the most important criteria. I used all the non-zero 53 predictor variables and let the RF algo decide on the relative importance of each.
+
+The supplied training data was split 60:40 training:test, and prior to running the algo, the data was preprocessed by centring and scaling.
+
+```{r, cache=TRUE}
+# preProcess data
+library(caret)
+inTrain = createDataPartition(data$classe, p = 0.6)[[1]]
+train = data[inTrain, ]
+test = data[-inTrain, ]
+set.seed(989)
+fit <- train(classe ~ ., data = train, method = "rf", preProc = c("center", "scale"),
+             trControl = trainControl(method = "cv", number = 5), prox = TRUE)
+print(fit)
+plot(varImp(fit), main = "Variable Importance")
+print(fit$finalModel)
+```
+
+## Cross Validation
+
+According to <http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr> it is not necessary to use cross-validation:
+
+> The out-of-bag (oob) error estimate 
+> In random forests, there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error.
+> It is estimated internally 
+
+Nonethless, in fitting the model above I explicitly set 5-fold cross validation and the out-of-sample error estimate is 0.95%:
+
+## Actual Out-of-sample Error
+
+In addition, for comparsion purposes, here are the results of the out-of-sample test using the 40% of data from the unseen test set.
+```{r}
+fit_test <- predict(fit, newdata = test[, -NCOL(data)])
+confusionMatrix(predict(fit, newdata = test[, -NCOL(data)]), test$classe)
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+# predictions for 2nd part of assignment on 20 cases
+(answers <- predict(fit, newdata = rawtest[, -NCOL(data)]))
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+setwd("C:\\Users\\Peter\\Documents\\GitHub\\datasciencecoursera_MachineLearning")
+pml_write_files(answers)
+# all correct
+```
